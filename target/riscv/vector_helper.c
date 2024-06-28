@@ -277,8 +277,142 @@ vext_ldst_us(void *vd, target_ulong base, CPURISCVState *env, uint32_t desc,
 
     VSTART_CHECK_EARLY_EXIT(env);
 
+<<<<<<< Updated upstream
     /* load bytes from guest memory */
     for (i = env->vstart; i < evl; env->vstart = ++i) {
+=======
+    //printf("OUTSIDE %d, %d\n", (evl << log2_esz), evl);
+
+    if ((evl << log2_esz) <= 8) {
+
+        //printf("INSIDE %d\n", __LINE__);
+
+        for (uint32_t j = env->vstart; j < (evl << log2_esz);) {
+            if (j >= 8) {
+                //printf("SIZE %u %d \n", j, __LINE__);
+                addr = base + ((j * nf) << log2_esz);  
+                if (is_load)      
+                    lde_b_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                else
+                    ste_b_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                j += 8;
+            }
+            else if (j >= 4) {
+                //printf("SIZE %u %d \n", j, __LINE__);
+                addr = base + ((j * nf) << log2_esz);        
+                if (is_load)
+                    lde_h_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                else
+                    ste_h_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                j += 4;
+            }
+            else if (j >= 2) {
+                //printf("SIZE %u %d \n", j, __LINE__);
+                addr = base + ((j * nf) << log2_esz);
+                if (is_load)
+                    lde_h_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                else
+                    ste_h_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                j += 2;
+            }
+            else {
+                //printf("SIZE %u %d \n", j, __LINE__);
+                addr = base + ((j * nf) << log2_esz);
+                if (is_load)
+                    lde_d_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                else
+                    ste_d_tlb(env, adjust_addr(env, addr), j, vd, ra);
+                j += 1;
+            }
+        }
+
+        /*
+        for (i = env->vstart; i < evl; env->vstart = ++i) {
+            k = 0;
+            while (k < nf) {
+            target_ulong addr = base + ((i * nf + k) << log2_esz);        
+            ldst_tlb(env, adjust_addr(env, addr),
+                             (i + k * max_elems) << log2_esz, vd, ra);
+            k++;
+            }
+        }
+        */
+
+        env->vstart = 0;
+        vext_set_tail_elems_1s(evl, vd, desc, nf, esz, max_elems);
+        
+        return;
+    }
+
+    vext_cont_ldst_elements(&info, base, env->vreg, env->vstart, evl, desc,
+                            log2_esz, false);
+    /* Probe the page(s).  Exit with exception for any invalid page. */
+    vext_cont_ldst_pages(env, &info, base, is_load, desc, esz, ra, false);
+    /* Handle watchpoints for all active elements. */
+    vext_cont_ldst_watchpoints(env, &info, env->vreg, base, esz, is_load, ra,
+                               desc);
+
+    /* Load bytes from guest memory */
+    flags = info.page[0].flags | info.page[1].flags;
+    if (unlikely(flags != 0)) {
+        /* At least one page includes MMIO. */
+        reg_start = info.reg_idx_first[0];
+        reg_last = info.reg_idx_last[1];
+        if (reg_last < 0) {
+            reg_last = info.reg_idx_split;
+            if (reg_last < 0) {
+                reg_last = info.reg_idx_last[0];
+            }
+        }
+        reg_last += 1;
+
+        if (nf == 1) {
+            addr = base + reg_start * esz;
+            vext_continus_ldst_tlb(env, ldst_tlb, vd, reg_last, addr,
+                                   reg_start, ra, esz, is_load);
+        } else {
+            for (i = reg_start; i < reg_last; ++i) {
+                k = 0;
+                while (k < nf) {
+                    addr = base + ((i * nf + k) * esz);
+                    ldst_tlb(env, adjust_addr(env, addr),
+                             (i + k * max_elems) << log2_esz, vd, ra);
+                    k++;
+                }
+            }
+        }
+
+        env->vstart = 0;
+        vext_set_tail_elems_1s(evl, vd, desc, nf, esz, max_elems);
+        return;
+    }
+
+    /* The entire operation is in RAM, on valid pages. */
+    reg_start = info.reg_idx_first[0];
+    reg_last = info.reg_idx_last[0] + 1;
+    host = info.page[0].host;
+
+    if (nf == 1) {
+        vext_continus_ldst_host(env, ldst_host, vd, reg_last, reg_start, host,
+                                esz, is_load);
+    } else {
+        for (i = reg_start; i < reg_last; ++i) {
+            k = 0;
+            while (k < nf) {
+                ldst_host(vd, (i + k * max_elems) << log2_esz,
+                          host + ((i * nf + k) * esz));
+                k++;
+            }
+        }
+    }
+
+    /*
+     * Use the slow path to manage the cross-page misalignment.
+     * But we know this is RAM and cannot trap.
+     */
+    if (unlikely(info.mem_off_split >= 0)) {
+        reg_start = info.reg_idx_split;
+>>>>>>> Stashed changes
         k = 0;
         while (k < nf) {
             target_ulong addr = base + ((i * nf + k) << log2_esz);

@@ -22,6 +22,7 @@
 #include "qemu/bitops.h"
 #include "cpu.h"
 #include "tcg/tcg-gvec-desc.h"
+#include "tcg/tcg-op.h"
 #include "internals.h"
 
 #define VSTART_CHECK_EARLY_EXIT(env) do { \
@@ -30,6 +31,13 @@
         return;                           \
     }                                     \
 } while (0)
+
+struct datav {
+    TCGv vl;
+    TCGv vtype;
+};
+
+extern struct datav datavset;
 
 static inline uint32_t vext_nf(uint32_t desc)
 {
